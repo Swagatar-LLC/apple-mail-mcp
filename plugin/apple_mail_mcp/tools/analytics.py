@@ -1,11 +1,31 @@
 """Analytics tools: attachments, statistics, exports, and dashboard."""
 
 import os
+import re
 from typing import Optional, List, Dict, Any
 
 from apple_mail_mcp.server import mcp
 from apple_mail_mcp.core import inject_preferences, escape_applescript, run_applescript, inbox_mailbox_script
 from apple_mail_mcp.constants import SKIP_FOLDERS
+
+
+def _safe_path_segment(name: str) -> str:
+    """Reduce an untrusted mailbox name to a single safe path segment.
+
+    The export directory is built as ``{save_directory}/{mailbox}_export``.
+    ``escape_applescript`` neutralizes AppleScript injection but leaves ``/`` and
+    ``..`` intact, so a mailbox of e.g. ``../../evil`` would place the export
+    outside the validated ``save_directory`` (SEC-05). Strip every path
+    separator and parent-directory reference down to a flat slug; never return a
+    value that os.path.join could interpret as traversal or an absolute path.
+    """
+    # Drop any directory components entirely, then whitelist the remainder.
+    base = name.replace("\\", "/").split("/")[-1]
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", base)
+    # Collapse runs of dots so "..", "..." etc. cannot survive, and trim leading
+    # dots/dashes/underscores so the segment is never "", "." or "..".
+    slug = re.sub(r"\.{2,}", "_", slug).strip("._-")
+    return slug or "mailbox"
 
 
 @mcp.tool()
@@ -453,6 +473,16 @@ def export_emails(
     safe_format = escape_applescript(format)
     safe_save_dir = escape_applescript(save_dir)
 
+    # The mailbox name is also used to build the on-disk export directory
+    # ({save_dir}/{mailbox}_export). escape_applescript leaves "/" and ".." intact,
+    # so derive a flat, traversal-free path segment separately (SEC-05) and confirm
+    # the resulting directory still resolves inside the validated save_dir.
+    mailbox_segment = _safe_path_segment(mailbox)
+    safe_mailbox_segment = escape_applescript(mailbox_segment)
+    export_dir = os.path.join(save_dir, f"{mailbox_segment}_export")
+    if os.path.realpath(export_dir) != os.path.join(save_dir, f"{mailbox_segment}_export"):
+        return "Error: Invalid mailbox name for export path"
+
     if scope == "single_email":
         if not subject_keyword:
             return "Error: 'subject_keyword' required for single_email scope"
@@ -570,8 +600,8 @@ def export_emails(
                 set messageCount to count of mailboxMessages
                 set exportCount to 0
 
-                -- Create export directory
-                set exportDir to "{safe_save_dir}/{safe_mailbox}_export"
+                -- Create export directory (mailbox segment sanitized in Python; SEC-05)
+                set exportDir to "{safe_save_dir}/{safe_mailbox_segment}_export"
                 do shell script "mkdir -p " & quoted form of exportDir
 
                 repeat with aMessage in mailboxMessages

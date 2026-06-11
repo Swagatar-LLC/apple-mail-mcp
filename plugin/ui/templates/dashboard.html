@@ -539,8 +539,21 @@
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>
 
-    <!-- MCP Apps SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@anthropic-ai/mcp-apps-sdk@latest/dist/mcp-apps-sdk.umd.js"></script>
+    <!--
+        MCP Apps SDK (SEC-03): the previous tag loaded
+        https://cdn.jsdelivr.net/npm/@anthropic-ai/mcp-apps-sdk@latest/dist/mcp-apps-sdk.umd.js
+        @latest + no Subresource Integrity, so whatever the CDN served ran in the
+        dashboard context with access to the window.MCPAppsSDK.callTool bridge
+        (read/move/trash mail). That npm package is not published (jsdelivr/npm
+        return 404), making this a latent name-squatting hazard: if anyone
+        registers the name, the CDN would silently inject their code here.
+        There is no released version to pin or SRI-hash and nothing to vendor, so
+        the dead reference is removed. The window.MCPAppsSDK call sites below are
+        already guarded (`if (window.MCPAppsSDK)`) and degrade gracefully. When a
+        real, versioned SDK ships, re-add it pinned to an exact version with an
+        integrity="sha384-..." hash and crossorigin="anonymous" (or vendor it
+        locally) — never @latest, never without SRI.
+    -->
 
     <script>
         // Data placeholders - will be replaced with actual data
