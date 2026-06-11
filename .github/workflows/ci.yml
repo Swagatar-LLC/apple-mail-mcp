@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Tests import the package from plugin/ (no installable layout for tests),
+# so every job sets PYTHONPATH=plugin.
+env:
+  PYTHONPATH: plugin
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r plugin/requirements.txt pytest
+
+      - name: Version-drift guard
+        run: python scripts/check_versions.py
+
+      - name: Run tests
+        run: python -m pytest -q
+
+  security-scan:
+    # Dependency vulnerability scan. Non-blocking until the requirements pin is
+    # hardened (see SEC-02 in the security plan); flip to blocking by removing
+    # continue-on-error once plugin/requirements.txt is on fastmcp>=3.2.0.
+    name: security-scan (pip-audit)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pip-audit
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r plugin/requirements.txt
