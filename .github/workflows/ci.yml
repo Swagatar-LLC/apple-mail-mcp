@@ -39,12 +39,11 @@ jobs:
         run: python -m pytest -q
 
   security-scan:
-    # Dependency vulnerability scan. Non-blocking until the requirements pin is
-    # hardened (see SEC-02 in the security plan); flip to blocking by removing
-    # continue-on-error once plugin/requirements.txt is on fastmcp>=3.2.0.
+    # Dependency vulnerability scan. Blocking gate: plugin/requirements.txt is on
+    # fastmcp>=3.2.0 (SEC-02), which clears GHSA-vv7q-7jx5-f767 (CVSS 10.0) and the
+    # transitive idna/python-multipart advisories. A new advisory here fails CI.
     name: security-scan (pip-audit)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
