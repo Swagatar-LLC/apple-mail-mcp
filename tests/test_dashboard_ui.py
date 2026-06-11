@@ -93,5 +93,32 @@ class DashboardBreakoutTests(unittest.TestCase):
         self.assertIn("Work", html)
 
 
+class CdnPinningTests(unittest.TestCase):
+    """SEC-03: the dashboard must not load an unpinned, no-SRI CDN script."""
+
+    def test_no_executable_unpinned_cdn_script_tag(self):
+        # The dead @latest reference must not be loaded by an actual <script src>
+        # tag. (It may still be named in an explanatory HTML comment.)
+        import re
+
+        html = _dashboard_html({"Gmail": 1}, [])
+        tags = re.findall(r"<script\b[^>]*\bsrc=[^>]*>", html, re.IGNORECASE)
+        self.assertFalse(
+            [t for t in tags if "mcp-apps-sdk" in t],
+            msg="dead mcp-apps-sdk CDN script is still loaded by a <script src> tag",
+        )
+
+    def test_any_cdn_script_is_pinned_with_sri(self):
+        # If a CDN <script src="https://..."> is ever (re)introduced, it must be
+        # version-pinned (no @latest) and carry a Subresource Integrity hash.
+        import re
+
+        html = _dashboard_html({"Gmail": 1}, [])
+        for tag in re.findall(r"<script\b[^>]*\bsrc=[^>]*>", html, re.IGNORECASE):
+            if "https://" in tag:
+                self.assertNotIn("@latest", tag)
+                self.assertIn("integrity=", tag)
+
+
 if __name__ == "__main__":
     unittest.main()
